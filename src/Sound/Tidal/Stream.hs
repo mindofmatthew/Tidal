@@ -62,6 +62,7 @@ type PatId = String
 
 data Cx = Cx {cxTarget :: Target,
               cxUDP :: O.UDP,
+              cxReplyUDP :: O.UDP,
               cxOSCs :: [OSC],
               cxAddr :: N.AddrInfo,
               cxBusAddr :: Maybe N.AddrInfo
@@ -203,7 +204,13 @@ startStream config oscmap
                                                            then Just <$> resolve (oAddress target) (show $ fromJust $ oBusPort target)
                                                            else return Nothing
                                         u <- O.openUDP (oAddress target) (oPort target)
-                                        return $ Cx {cxUDP = u, cxAddr = remote_addr, cxBusAddr = remote_bus_addr, cxTarget = target, cxOSCs = os}                                        
+                                        reply <- if oHandshake target
+                                                 then
+                                                   do reply <- O.udp_server $ toInteger N.defaultPort
+                                                      O.sendTo reply (O.Message "/dirt/handshake" []) remote_addr
+                                                      return reply
+                                                 else return Nothing
+                                        return $ Cx {cxUDP = u, cxReplyUDP = reply, cxAddr = remote_addr, cxBusAddr = remote_bus_addr, cxTarget = target, cxOSCs = os}                                        
                    ) oscmap
        let stream = Stream {sConfig = config,
                             sBusses = bussesMV,
@@ -220,15 +227,15 @@ startStream config oscmap
        return stream
 
 -- It only really works to handshake with one target at the moment..
-sendHandshakes :: Stream -> IO ()
-sendHandshakes stream = mapM_ sendHandshake $ filter (oHandshake . cxTarget) (sCxs stream)
-  where sendHandshake cx = if (isJust $ sListen stream)
-                           then                                            
-                             do -- send it _from_ the udp socket we're listening to, so the
-                                -- replies go back there
-                                sendO False (sListen stream) cx $ O.Message "/dirt/handshake" []
-                           else
-                             hPutStrLn stderr "Can't handshake with SuperCollider without control port."
+-- sendHandshakes :: Stream -> IO ()
+-- sendHandshakes stream = mapM_ sendHandshake $ filter (oHandshake . cxTarget) (sCxs stream)
+--   where sendHandshake cx = if (isJust $ sListen stream)
+--                            then                                            
+--                              do -- send it _from_ the udp socket we're listening to, so the
+--                                 -- replies go back there
+                                
+--                            else
+--                              hPutStrLn stderr "Can't handshake with SuperCollider without control port."
 
 sendO :: Bool -> (Maybe O.UDP) -> Cx -> O.Message -> IO ()
 sendO isBusMsg (Just listen) cx msg = O.sendTo listen (O.Packet_Message msg) (N.addrAddress addr)
@@ -460,7 +467,7 @@ doTick fake stream st =
          -- TODO onset is calculated in toOSC as well..
          on e tempo'' = (sched tempo'' $ start $ wholeOrPart e)
          (tes, tempo') = processCps tempo $ es'
-     forM_ cxs $ \cx@(Cx target _ oscs _ _) -> do
+     forM_ cxs $ \cx@(Cx target _ _ oscs _ _) -> do
          let latency = oLatency target + extraLatency
              ms = concatMap (\(t, e) ->
                               if (fake || (on e t) < frameEnd)
