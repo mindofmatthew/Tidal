@@ -78,7 +78,7 @@ instance Show Value where
   show (VS s)  = ('"':s) ++ "\""
   show (VI i)  = show i
   show (VF f)  = show f ++ "f"
-  show (VN n)  = show n ++ "n"
+  show (VN n)  = (show . unNote) n ++ "n"
   show (VR r)  = show r ++ "r"
   show (VB b)  = show b
   show (VX xs) = show xs
