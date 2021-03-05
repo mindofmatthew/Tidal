@@ -1,4 +1,4 @@
-{-# LANGUAGE ConstraintKinds, GeneralizedNewtypeDeriving, FlexibleContexts, ScopedTypeVariables, BangPatterns #-}
+{-# LANGUAGE ConstraintKinds, GeneralizedNewtypeDeriving, FlexibleInstances, FlexibleContexts, ScopedTypeVariables, BangPatterns #-}
 {-# OPTIONS_GHC -fno-warn-missing-fields #-}
 {-# language DeriveGeneric, StandaloneDeriving #-}
 
@@ -58,7 +58,17 @@ data Stream = Stream {sConfig :: Config,
                       sCxs :: [Cx]
                      }
 
-type PatId = String
+class ID i where
+  toID :: i -> String
+
+instance ID (Integral i => i) where
+  toID i = show i
+
+instance ID Char where
+  toID i = i:[]
+
+instance ID [Char] where
+  toID i = i
 
 data Cx = Cx {cxTarget :: Target,
               cxUDP :: O.UDP,
@@ -104,7 +114,7 @@ data PlayState = PlayState {pattern :: ControlPattern,
                            }
                deriving Show
 
-type PlayMap = Map.Map PatId PlayState
+type PlayMap = Map.Map String PlayState
 
 
 sDefault :: String -> Maybe Value
@@ -524,7 +534,7 @@ streamList :: Stream -> IO ()
 streamList s = do pMap <- readMVar (sPMapMV s)
                   let hs = hasSolo pMap
                   putStrLn $ concatMap (showKV hs) $ Map.toList pMap
-  where showKV :: Bool -> (PatId, PlayState) -> String
+  where showKV :: Bool -> (String, PlayState) -> String
         showKV True  (k, (PlayState {solo = True})) = k ++ " - solo\n"
         showKV True  (k, _) = "(" ++ k ++ ")\n"
         showKV False (k, (PlayState {solo = False})) = k ++ "\n"
@@ -553,25 +563,25 @@ streamReplace s k !pat
   where updatePS (Just playState) = do playState {pattern = pat, history = pat:(history playState)}
         updatePS Nothing = PlayState pat False False [pat]
 
-streamMute :: Show a => Stream -> a -> IO ()
-streamMute s k = withPatId s (show k) (\x -> x {mute = True})
+streamMute :: ID a => Stream -> a -> IO ()
+streamMute s k = withPatId s (toID k) (\x -> x {mute = True})
 
-streamMutes :: Show a => Stream -> [a] -> IO ()
-streamMutes s ks = withPatIds s (map show ks) (\x -> x {mute = True})
+streamMutes :: ID a => Stream -> [a] -> IO ()
+streamMutes s ks = withPatIds s (map toID ks) (\x -> x {mute = True})
 
-streamUnmute :: Show a => Stream -> a -> IO ()
-streamUnmute s k = withPatId s (show k) (\x -> x {mute = False})
+streamUnmute :: ID a => Stream -> a -> IO ()
+streamUnmute s k = withPatId s (toID k) (\x -> x {mute = False})
 
-streamSolo :: Show a => Stream -> a -> IO ()
-streamSolo s k = withPatId s (show k) (\x -> x {solo = True})
+streamSolo :: ID a => Stream -> a -> IO ()
+streamSolo s k = withPatId s (toID k) (\x -> x {solo = True})
 
-streamUnsolo :: Show a => Stream -> a -> IO ()
-streamUnsolo s k = withPatId s (show k) (\x -> x {solo = False})
+streamUnsolo :: ID a => Stream -> a -> IO ()
+streamUnsolo s k = withPatId s (toID k) (\x -> x {solo = False})
 
-withPatId :: Stream -> PatId -> (PlayState -> PlayState) -> IO ()
+withPatId :: Stream -> String -> (PlayState -> PlayState) -> IO ()
 withPatId s k f = withPatIds s [k] f
 
-withPatIds :: Stream -> [PatId] -> (PlayState -> PlayState) -> IO ()
+withPatIds :: Stream -> [String] -> (PlayState -> PlayState) -> IO ()
 withPatIds s ks f
   = do playMap <- takeMVar $ sPMapMV s
        let pMap' = foldr (Map.update (\x -> Just $ f x)) playMap ks
