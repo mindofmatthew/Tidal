@@ -30,9 +30,6 @@ class ID a where
 class IDs a where
   toIDs :: a -> [String]
 
-instance ID i => IDs [i] where
-  toIDs = map toID
-
 -- Integers and strings can both be used for functions which require a single ID
 -- or potentially many IDs
 instance ID Integer where
@@ -41,8 +38,14 @@ instance ID Integer where
 instance IDs Integer where
   toIDs i = [show i]
 
+instance IDs [Integer] where
+  toIDs = map toID
+
 instance ID String where
   toID i = i
 
 instance IDs String where
   toIDs i = [i]
+
+instance IDs [String] where
+  toIDs = map toID

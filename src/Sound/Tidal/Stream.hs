@@ -654,7 +654,7 @@ ctrlResponder waits c (stream@(Stream {sListen = Just sock}))
         act (O.Message "/mute" ks)
           = streamMute stream $ mapMaybe datumToID ks
         act (O.Message "/unmute" ks)
-          = streamMute stream $ mapMaybe datumToID ks
+          = streamUnmute stream $ mapMaybe datumToID ks
         act (O.Message "/solo" ks)
           = streamSolo stream $ mapMaybe datumToID ks
         act (O.Message "/unsolo" ks)
